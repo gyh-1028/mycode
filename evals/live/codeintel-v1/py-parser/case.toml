@@ -1,0 +1,5 @@
+name = "intel-py-parser"
+language = "python"
+prompt = "parse_pair returns the fields in reverse order. Fix the symbol definition."
+[expected]
+ast_parse = ["parser.py"]

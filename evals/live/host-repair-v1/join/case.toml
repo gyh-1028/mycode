@@ -1,0 +1,6 @@
+name = "host-join"
+language = "python"
+safety = "host"
+prompt = "Run pytest, fix join_names, and confirm pytest passes."
+[expected]
+ast_parse = ["names.py"]

@@ -1,0 +1,3 @@
+name = "ts-fallback"
+language = "typescript"
+prompt = "Fix displayName in names.ts so null uses the fallback 'Anonymous'."

@@ -1,0 +1,6 @@
+name = "host-reverse"
+language = "python"
+safety = "host"
+prompt = "Run pytest, repair the code, and verify the tests pass."
+[expected]
+ast_parse = ["text.py"]

@@ -1,0 +1,5 @@
+name = "py-average"
+language = "python"
+prompt = "Fix average in stats.py and return 0.0 for an empty list."
+[expected]
+ast_parse = ["stats.py"]

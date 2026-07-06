@@ -1,0 +1,6 @@
+name = "host-minimum"
+language = "python"
+safety = "host"
+prompt = "Use pytest to identify and fix the bug. Verify after editing."
+[expected]
+ast_parse = ["values.py"]

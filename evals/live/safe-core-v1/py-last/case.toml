@@ -1,0 +1,5 @@
+name = "py-last"
+language = "python"
+prompt = "Fix last_or_none in collections.py so an empty list returns None."
+[expected]
+ast_parse = ["collections.py"]

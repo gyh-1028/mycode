@@ -1,0 +1,6 @@
+name = "host-mapping"
+language = "python"
+safety = "host"
+prompt = "Run pytest and fix the implementation while preserving the public API."
+[expected]
+ast_parse = ["mapping.py"]

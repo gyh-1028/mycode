@@ -1,0 +1,5 @@
+name = "py-add"
+language = "python"
+prompt = "Fix the add function in calc.py. Change only what is necessary."
+[expected]
+ast_parse = ["calc.py"]

@@ -1,0 +1,6 @@
+name = "intel-py-discount"
+language = "python"
+prompt = "The checkout total is wrong. Fix apply_discount without changing checkout.py."
+[expected]
+ast_parse = ["pricing.py"]
+protected_files = ["checkout.py"]

@@ -1,0 +1,5 @@
+name = "intel-py-policy"
+language = "python"
+prompt = "Editors should be allowed to edit. Correct can_edit at its definition."
+[expected]
+ast_parse = ["policy.py"]

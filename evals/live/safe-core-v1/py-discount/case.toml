@@ -1,0 +1,5 @@
+name = "py-discount"
+language = "python"
+prompt = "Fix discount in pricing.py so a 10 percent discount multiplies by 0.90."
+[expected]
+ast_parse = ["pricing.py"]

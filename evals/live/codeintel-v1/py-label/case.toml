@@ -1,0 +1,5 @@
+name = "intel-py-label"
+language = "python"
+prompt = "Date labels need ISO order YYYY-MM-DD. Fix date_label."
+[expected]
+ast_parse = ["dates.py"]

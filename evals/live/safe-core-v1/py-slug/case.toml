@@ -1,0 +1,5 @@
+name = "py-slug"
+language = "python"
+prompt = "Fix slugify in text.py: trim, lowercase, and replace spaces with hyphens."
+[expected]
+ast_parse = ["text.py"]

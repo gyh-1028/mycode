@@ -1,0 +1,5 @@
+name = "py-greeting"
+language = "python"
+prompt = "Fix greet in greeting.py so it returns exactly 'Hello, NAME!'."
+[expected]
+ast_parse = ["greeting.py"]

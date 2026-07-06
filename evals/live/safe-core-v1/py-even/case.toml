@@ -1,0 +1,5 @@
+name = "py-even"
+language = "python"
+prompt = "Correct is_even in numbers.py."
+[expected]
+ast_parse = ["numbers.py"]

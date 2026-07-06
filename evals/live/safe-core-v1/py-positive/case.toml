@@ -1,0 +1,5 @@
+name = "py-positive"
+language = "python"
+prompt = "Fix positive_only in filters.py so zero and negative numbers are excluded."
+[expected]
+ast_parse = ["filters.py"]

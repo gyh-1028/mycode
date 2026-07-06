@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mycode-ai-cli"
+version = "0.2.2"
+description = "A local-first AI coding agent for terminals, TUI workflows, and VS Code."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "mycode" }]
+keywords = ["ai", "agent", "cli", "coding", "mcp", "tui", "vscode"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+]
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "openai>=1.0",
+    "anthropic>=0.77",
+    "pydantic>=2",
+    "keyring>=25,<26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "jsonschema>=4.23",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6",
+    "pyright>=1.1",
+    "ruff>=0.11",
+    "twine>=5",
+]
+mcp = ["mcp>=1.0,<2"]
+tui = ["textual>=8.2,<9"]
+web = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "websockets>=13,<17",
+]
+trace = [
+    "opentelemetry-api>=1.30",
+    "opentelemetry-sdk>=1.30",
+    "opentelemetry-exporter-otlp-proto-http>=1.30",
+]
+all = [
+    "mcp>=1.0,<2",
+    "textual>=8.2,<9",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "websockets>=13,<17",
+    "opentelemetry-api>=1.30",
+    "opentelemetry-sdk>=1.30",
+    "opentelemetry-exporter-otlp-proto-http>=1.30",
+]
+
+[project.urls]
+Homepage = "https://github.com/mycode-ai/mycode"
+Documentation = "https://github.com/mycode-ai/mycode#readme"
+Issues = "https://github.com/mycode-ai/mycode/issues"
+Source = "https://github.com/mycode-ai/mycode"
+
+[project.scripts]
+mycode = "mycode.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mycode = ["web/static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Temp dirs are redirected under project-local .pytmp/run-<pid> via
+# PYTEST_DEBUG_TEMPROOT in conftest.py. This keeps tool tests inside the project
+# root while avoiding stale Windows pytest temp dirs with broken ACLs.
+addopts = "--cov=mycode --cov-report=term-missing --cov-fail-under=80"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 160
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008", "B011"]
+
+[tool.pyright]
+include = ["src"]
+exclude = [".venv", "**/node_modules", "**/.pytmp"]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+useLibraryCodeForTypes = true
+pythonVersion = "3.11"

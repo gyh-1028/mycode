@@ -1,0 +1,11 @@
+# mycode 项目配置。
+# 注意:这里不存放 API key —— 只记录它所在的环境变量名(api_key_env),
+# 运行时从该环境变量读取。
+default_model = "deepseek-chat"
+max_steps = 20
+max_file_lines = 1500
+max_command_output = 20000
+
+[provider]
+api_key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"

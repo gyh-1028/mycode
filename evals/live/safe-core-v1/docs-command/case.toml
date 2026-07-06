@@ -1,0 +1,3 @@
+name = "docs-command"
+language = "text"
+prompt = "Correct README.md so the install command is pip install mycode-ai-cli."

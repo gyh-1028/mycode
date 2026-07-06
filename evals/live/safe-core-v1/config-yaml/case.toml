@@ -1,0 +1,3 @@
+name = "config-yaml"
+language = "config"
+prompt = "In service.yaml change the service port to 8080."

@@ -1,0 +1,5 @@
+name = "py-extension"
+language = "python"
+prompt = "Fix ensure_py in paths.py so it preserves .py names and appends .py otherwise."
+[expected]
+ast_parse = ["paths.py"]

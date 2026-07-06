@@ -1,0 +1,5 @@
+name = "intel-py-route"
+language = "python"
+prompt = "The user endpoint is missing the API prefix. Fix user_url."
+[expected]
+ast_parse = ["urls.py"]

@@ -1,0 +1,6 @@
+name = "host-adult"
+language = "python"
+safety = "host"
+prompt = "Run the tests, fix the boundary bug, and rerun the tests."
+[expected]
+ast_parse = ["age.py"]

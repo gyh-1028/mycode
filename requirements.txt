@@ -1,0 +1,8 @@
+# Production dependencies for mycode.
+# Generated from pyproject.toml. Prefer `pip install -e .` for editable install.
+typer>=0.12
+rich>=13
+openai>=1.0
+anthropic>=0.77
+pydantic>=2
+keyring>=25,<26

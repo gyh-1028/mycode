@@ -1,0 +1,3 @@
+name = "ts-capitalize"
+language = "typescript"
+prompt = "Fix capitalize in text.ts so the first character becomes uppercase."

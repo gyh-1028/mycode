@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.pytest_tmp*
+.pytmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+*.coverage.xml
+
+# Local agent/editor state
+.claude-plans/
+.sixth/
+
+# VS Code extension build/test artifacts
+editors/vscode/node_modules/
+editors/vscode/dist/
+editors/vscode/.vscode-test/
+editors/vscode/*.vsix
+clients/web/node_modules/
+
+# Local config / secrets
+.env
+
+# Saved sessions (transient local state)
+.mycode/sessions/
+.mycode/index/
+.mycode/evals/runs/
+.mycode/checkpoints/
+.mycode/logs/

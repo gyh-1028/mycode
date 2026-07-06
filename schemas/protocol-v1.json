@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mycode.dev/schemas/protocol-v1.json",
+  "title": "MyCode JSON-RPC Protocol v1",
+  "description": "Line-delimited JSON-RPC 2.0 messages exchanged with mycode serve --stdio.",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/notification" }
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "type": ["string", "integer"] },
+        "method": { "type": "string", "minLength": 1 },
+        "params": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["jsonrpc", "id"],
+      "properties": {
+        "jsonrpc": { "const": "2.0" },
+        "id": { "type": ["string", "integer", "null"] },
+        "result": {},
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "integer" },
+            "message": { "type": "string" },
+            "data": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      "oneOf": [
+        { "required": ["result"] },
+        { "required": ["error"] }
+      ],
+      "additionalProperties": false
+    },
+    "agentEvent": {
+      "type": "object",
+      "description": "An event notification emitted by the agent runtime. All fields except type are optional for backwards compatibility.",
+      "properties": {
+        "schema_version": { "type": "integer" },
+        "run_id": { "type": "string" },
+        "seq": { "type": "integer" },
+        "type": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "number" },
+        "payload": { "type": "object" }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "toolStartedPayload": {
+      "type": "object",
+      "description": "Optional fields carried by tool.call.started events.",
+      "properties": {
+        "name": { "type": "string" },
+        "args_preview": { "type": "string" },
+        "step": { "type": "integer" },
+        "tool_call_id": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "toolFinishedPayload": {
+      "type": "object",
+      "description": "Optional fields carried by tool.call.finished events.",
+      "properties": {
+        "name": { "type": "string" },
+        "result_len": { "type": "integer" },
+        "is_error": { "type": "boolean" },
+        "error_signature": { "type": ["string", "null"] },
+        "tool_call_id": { "type": "string" },
+        "duration_ms": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+    "notification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["jsonrpc", "method", "params"],
+          "properties": {
+            "jsonrpc": { "const": "2.0" },
+            "method": { "const": "agent/event" },
+            "params": { "$ref": "#/$defs/agentEvent" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["jsonrpc", "method", "params"],
+          "properties": {
+            "jsonrpc": { "const": "2.0" },
+            "method": { "const": "permission/request" },
+            "params": {
+              "type": "object",
+              "required": ["approvalId", "prompt", "kind"],
+              "properties": {
+                "approvalId": { "type": "string" },
+                "runId": { "type": ["string", "null"] },
+                "kind": { "type": "string" },
+                "prompt": { "type": "string" },
+                "display_path": { "type": ["string", "null"] },
+                "diff": { "type": ["string", "null"] },
+                "command": { "type": ["string", "null"] },
+                "risk": { "type": ["string", "null"] },
+                "action": { "type": ["string", "null"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["jsonrpc", "method", "params"],
+          "properties": {
+            "jsonrpc": { "const": "2.0" },
+            "method": { "const": "run/result" },
+            "params": {
+              "type": "object",
+              "required": ["status", "sessionId"],
+              "properties": {
+                "run_id": { "type": "string" },
+                "sessionId": { "type": "string" },
+                "status": { "type": "string" },
+                "final_text": { "type": ["string", "null"] },
+                "error": { "type": ["string", "null"] },
+                "tracePath": { "type": ["string", "null"] }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

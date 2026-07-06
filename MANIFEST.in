@@ -1,0 +1,11 @@
+include CHANGELOG.md
+recursive-include docs *.md *.png
+recursive-include schemas *.json
+recursive-include src/mycode/web/static *
+include clients/web/index.html
+include clients/web/package.json
+include clients/web/package-lock.json
+include clients/web/tsconfig.json
+include clients/web/vite.config.ts
+recursive-include clients/web/src *.css *.ts *.tsx
+recursive-include clients/web/e2e *.mjs

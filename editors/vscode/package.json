@@ -1,0 +1,148 @@
+{
+  "name": "mycode",
+  "displayName": "MyCode",
+  "description": "Run the MyCode AI coding agent inside VS Code.",
+  "version": "0.2.2",
+  "publisher": "mycode-dev",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mycode-ai/mycode.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:mycode.chat",
+    "onView:mycode.sessions",
+    "onCommand:mycode.open",
+    "onCommand:mycode.newSession",
+    "onCommand:mycode.askSelection"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "mycode.open",
+        "title": "MyCode: Open"
+      },
+      {
+        "command": "mycode.newSession",
+        "title": "MyCode: New Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mycode.refreshSessions",
+        "title": "MyCode: Refresh Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mycode.openSession",
+        "title": "MyCode: Open Session"
+      },
+      {
+        "command": "mycode.askSelection",
+        "title": "MyCode: Ask About Selection"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mycode",
+          "title": "MyCode",
+          "icon": "resources/mycode.svg"
+        }
+      ]
+    },
+    "views": {
+      "mycode": [
+        {
+          "id": "mycode.sessions",
+          "name": "Sessions"
+        },
+        {
+          "id": "mycode.chat",
+          "name": "Agent",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "mycode.newSession",
+          "when": "view == mycode.sessions",
+          "group": "navigation"
+        },
+        {
+          "command": "mycode.refreshSessions",
+          "when": "view == mycode.sessions",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "mycode.askSelection",
+          "when": "editorHasSelection",
+          "group": "mycode"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MyCode",
+      "properties": {
+        "mycode.executable": {
+          "type": "string",
+          "default": "mycode",
+          "description": "MyCode executable available in the workspace environment."
+        },
+        "mycode.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Arguments inserted before 'serve --stdio'."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:vscode": "npm run build && node dist/test/runTest.js",
+    "package": "npm run check && npm run test && npm run build && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.36",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.5.0",
+    "esbuild": "^0.25.0",
+    "mocha": "^11.7.5",
+    "playwright-core": "^1.61.1",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  },
+  "overrides": {
+    "diff": "^8.0.3",
+    "serialize-javascript": "^7.0.5"
+  }
+}

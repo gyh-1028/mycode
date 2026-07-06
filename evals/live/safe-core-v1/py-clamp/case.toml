@@ -1,0 +1,5 @@
+name = "py-clamp"
+language = "python"
+prompt = "Fix clamp.py so clamp(value, low, high) returns low below range, high above range, otherwise value."
+[expected]
+ast_parse = ["clamp.py"]

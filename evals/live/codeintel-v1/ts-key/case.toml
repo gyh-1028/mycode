@@ -1,0 +1,3 @@
+name = "intel-ts-key"
+language = "typescript"
+prompt = "Tenant cache keys collide. Fix cacheKey to include tenant and id separated by a colon."

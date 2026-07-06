@@ -1,0 +1,6 @@
+name = "host-add"
+language = "python"
+safety = "host"
+prompt = "Run pytest, fix the failing implementation, then run pytest again."
+[expected]
+ast_parse = ["calc.py"]

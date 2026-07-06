@@ -1,0 +1,3 @@
+name = "ts-sum"
+language = "typescript"
+prompt = "Fix sum in math.ts."

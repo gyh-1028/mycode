@@ -1,0 +1,5 @@
+name = "intel-py-name"
+language = "python"
+prompt = "User display names are uppercase. Fix clean_name at its definition."
+[expected]
+ast_parse = ["names.py"]

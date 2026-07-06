@@ -1,0 +1,5 @@
+name = "intel-py-stock"
+language = "python"
+prompt = "Zero stock must not be available. Fix is_available at its definition."
+[expected]
+ast_parse = ["inventory.py"]
