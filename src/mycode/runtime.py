@@ -21,7 +21,7 @@ from mycode.codeintel.tools import close_service
 from mycode.config import ConfigLoadResult, load_config_result
 from mycode.context import maybe_compact
 from mycode.llm import BaseProvider, build_provider
-from mycode.mcp import build_registry as build_mcp_registry
+from mycode.mcp import MCPRegistry
 from mycode.mentions import expand_mentions
 from mycode.plugins import load_enabled_plugins
 from mycode.prompts import build_system_prompt
@@ -88,6 +88,8 @@ class MyCodeRuntime:
             if self.config.codeintel.enabled and self.config.codeintel.auto_context
             else None
         )
+        self._mcp_registry = MCPRegistry(self.config.mcp.servers, self.project_root)
+        self._closed = False
 
         plugin_errors: list[str] = []
         if self.config.plugins:
@@ -170,6 +172,21 @@ class MyCodeRuntime:
     def list_sessions(self) -> list[Session]:
         return Session.list_all()
 
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._mcp_registry.stop()
+        close_service(self.project_root)
+        self._closed = True
+
+    def __enter__(self) -> MyCodeRuntime:
+        if self._closed:
+            raise RuntimeError("runtime is closed")
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
     def run_prompt(
         self,
         session: Session,
@@ -185,6 +202,9 @@ class MyCodeRuntime:
     ) -> AgentRunResult:
         """Append a user turn, run the agent, and persist each consistent state."""
 
+        if self._closed:
+            raise RuntimeError("runtime is closed")
+
         if collaboration_mode not in COLLABORATION_MODES:
             raise ValueError(f"未知工作模式: {collaboration_mode}")
         if permission_mode not in PERMISSION_MODES:
@@ -195,7 +215,6 @@ class MyCodeRuntime:
         session.save(session.messages)
         checkpoint = Checkpoint.begin(session_id=session.id, task=prompt, root=self.project_root)
         checkpoint_token = set_current_checkpoint(checkpoint)
-        mcp_registry = None if collaboration_mode in {"plan", "review"} else build_mcp_registry(self.project_root)
 
         resolved_run_id = run_id or uuid.uuid4().hex[:12]
         trace_cfg = self.config.trace
@@ -218,8 +237,8 @@ class MyCodeRuntime:
             sinks.append(otel_sink)
 
         try:
-            if mcp_registry is not None:
-                mcp_registry.start()
+            if collaboration_mode not in {"plan", "review"} and not self._mcp_registry.started:
+                self._mcp_registry.start()
             effective_permission_mode = "read-only" if collaboration_mode in {"plan", "review"} else permission_mode
             with permission_scope(effective_permission_mode), approval_handler(approval):
                 result = AgentRunner(
@@ -253,9 +272,6 @@ class MyCodeRuntime:
                 result.trace_path = str(trace_writer.path)
             return result
         finally:
-            if mcp_registry is not None:
-                mcp_registry.stop()
-            close_service(self.project_root)
             reset_current_checkpoint(checkpoint_token)
             if trace_writer is not None:
                 trace_writer.close()

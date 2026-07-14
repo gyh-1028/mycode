@@ -85,6 +85,9 @@ mycode web
 ```
 
 服务只监听 `127.0.0.1`，使用临时令牌认证，并自动打开浏览器。
+工作台支持会话筛选、快速模型切换、项目搜索、只读代码预览、文件或选区上下文、
+结构化活动/Diff/上下文检查器、检查点撤销，以及刷新后的自动重连。Agent 运行期间会锁定
+当前会话，避免工具事件或写入结果串到其他会话。
 
 ## 工作与权限模式
 
@@ -100,10 +103,11 @@ Web 工作台提供三种工作模式：
 
 | 权限 | 行为 |
 | --- | --- |
-| 标准确认 | 写文件、执行命令和外部工具按项目配置逐次确认 |
+| 标准确认 | 写文件、执行命令和外部工具按项目配置确认；可仅对本轮完全相同的操作记忆许可 |
 | 只读 | 隐藏并拒绝写入、Shell 和 MCP 能力 |
 | 完全信任 | 跳过逐次确认，但仍执行项目根、敏感文件和危险命令检查 |
 
+完全信任只对当前会话有效，不会跨浏览器重启、会话切换或模型切换持久化。
 完全信任不等于安全沙箱。详细边界见[安全说明](#安全说明)。
 
 ## 常用命令
@@ -142,6 +146,8 @@ mycode --help                       查看完整帮助
 | Kimi 开放平台 | K2.7 Code、K2.6、K2.5、Moonshot V1 等 |
 
 Kimi Coding Plan 与 Kimi 开放平台是两个独立渠道，API 地址、计费方式和 API Key 均不能混用。
+内置模型目录是版本化快照，不是在线发现服务。模型 ID、能力和价格可能随 Provider 更新；
+`mycode doctor` 会显示目录与价格的验证状态，未知价格不会被伪造为已知成本。
 完整配置说明见[模型配置档](docs/MODEL_PROFILES.md)。
 
 ## 配置
@@ -186,6 +192,8 @@ mycode eval live --suite codeintel-v1 --repeat 3 --auto-context on
 ```
 
 普通测试和离线 Eval 不访问网络、不需要真实 API Key。真实模型 Eval 会产生费用，并受显式预算限制。
+大仓库可使用 Git change-set 增量更新索引；在源码仓库中可通过
+`python scripts/benchmark_codeintel.py --files 10000 --changes 100 --git` 在本机复测。
 
 ## 会话、撤销与 Trace
 
@@ -225,7 +233,7 @@ MyCode 包含以下基础防护：
 
 ```bash
 python -m pip install -e ".[dev,all]"
-python -m ruff check src tests
+python -m ruff check src tests scripts
 python -m pyright src
 python -m pytest -q
 mycode eval run --json

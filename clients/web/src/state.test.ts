@@ -20,12 +20,23 @@ describe("runReducer", () => {
   it("pairs tool completion with the latest running activity", () => {
     let state = runReducer(initialRunState, { type: "event", event: event(1, "tool.call.started", { name: "read_file", tool_call_id: "t1", args_preview: "app.py" }) });
     state = runReducer(state, { type: "event", event: event(2, "tool.call.finished", { name: "read_file", tool_call_id: "t1", result_len: 20, duration_ms: 4, is_error: false }) });
-    expect(state.activities).toEqual([{ id: "t1", name: "read_file", detail: "20 字符", duration: 4, status: "done" }]);
+    expect(state.activities).toEqual([{
+      id: "t1",
+      kind: "tool",
+      name: "read_file",
+      summary: "返回 20 字符",
+      detail: "app.py",
+      duration: 4,
+      status: "done",
+      step: undefined,
+    }]);
   });
 
   it("records selected context without adding it to messages", () => {
-    const state = runReducer(initialRunState, { type: "event", event: event(1, "context.selected", { paths: ["app.py"], tokens: 20 }) });
-    expect(state.context).toContain("app.py");
+    const state = runReducer(initialRunState, { type: "event", event: event(1, "context.selected", {
+      paths: ["app.py"], estimated_tokens: 20, items: [], degraded: [],
+    }) });
+    expect(state.context?.paths).toContain("app.py");
     expect(state.messages).toHaveLength(0);
   });
 
@@ -62,5 +73,15 @@ describe("runReducer", () => {
       role: "assistant",
       content: "计划：\n1. inspect\n2. verify",
     });
+    expect(state.plan).toBe("1. inspect\n2. verify");
+  });
+
+  it("keeps terminal errors and deduplicates final text", () => {
+    let state = runReducer(initialRunState, { type: "user", content: "修复" });
+    state = runReducer(state, { type: "result", status: "failed", error: "provider timeout", finalText: "部分结果" });
+    expect(state.error).toBe("provider timeout");
+    expect(state.messages.at(-1)?.content).toBe("部分结果");
+    state = runReducer(state, { type: "result", status: "completed", finalText: "部分结果" });
+    expect(state.messages.filter((message) => message.content === "部分结果")).toHaveLength(1);
   });
 });

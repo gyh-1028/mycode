@@ -843,7 +843,15 @@ def run_tui(session_id: str | None = None) -> None:
         runtime = MyCodeRuntime.from_environment(project_root=project_root)
     except ConfigError as exc:
         config_error = str(exc)
-    MyCodeTUI(runtime=runtime, session_id=session_id, config_error=config_error).run()
+    app = MyCodeTUI(runtime=runtime, session_id=session_id, config_error=config_error)
+    try:
+        app.run()
+    finally:
+        active_runtime = app.runtime
+        if active_runtime is not None:
+            close = getattr(active_runtime, "close", None)
+            if callable(close):
+                close()
 
 
 __all__ = ["ApprovalScreen", "ConfigWizardScreen", "MyCodeTUI", "run_tui"]

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from mycode.catalog import MODEL_CATALOG_DATA
+
 
 @dataclass(frozen=True)
 class Price:
@@ -22,23 +24,26 @@ class UsageTotals:
     cache_write_tokens: int = 0
 
 
-# Prices are USD per 1M tokens and intentionally small/sparse. Config overrides
-# take precedence; unknown models display tokens only.
+# Prices are USD per 1M tokens. The versioned catalog deliberately keeps
+# unknown prices absent; config overrides remain authoritative.
+def _price_from_catalog(raw: Mapping[str, float | None]) -> Price:
+    input_price = raw.get("input")
+    output_price = raw.get("output")
+    cache_read = raw.get("cache_read")
+    cache_write = raw.get("cache_write")
+    if input_price is None or output_price is None:
+        raise ValueError("catalog prices require input and output values")
+    return Price(
+        input=float(input_price),
+        output=float(output_price),
+        cache_read=float(cache_read) if cache_read is not None else None,
+        cache_write=float(cache_write) if cache_write is not None else None,
+    )
+
+
 BUILTIN_PRICES: dict[str, Price] = {
-    "gpt-4o-mini": Price(input=0.15, output=0.60, cache_read=0.075),
-    "deepseek-chat": Price(input=0.27, output=1.10, cache_read=0.07),
-    # Anthropic Claude 3.5 Sonnet family (prices are USD per 1M tokens).
-    "claude-sonnet-4-6": Price(input=3.0, output=15.0, cache_read=0.30, cache_write=3.75),
-    "claude-3-5-sonnet": Price(input=3.0, output=15.0, cache_read=0.30, cache_write=3.75),
-    "claude-3-5-sonnet-20241022": Price(input=3.0, output=15.0, cache_read=0.30, cache_write=3.75),
-    # Kimi / Moonshot AI (USD per 1M tokens; cache hit pricing per official 2026 rates).
-    "kimi-k2.7-code": Price(input=0.95, output=4.00, cache_read=0.19),
-    "kimi-for-coding": Price(input=0.95, output=4.00, cache_read=0.19),
-    "kimi-k2.6": Price(input=0.95, output=4.00, cache_read=0.19),
-    "kimi-k2.5": Price(input=0.60, output=3.00),
-    "moonshot-v1-128k": Price(input=0.42, output=1.68),
-    "moonshot-v1-32k": Price(input=0.21, output=0.84),
-    "moonshot-v1-8k": Price(input=0.06, output=0.30),
+    model: _price_from_catalog(raw)
+    for model, raw in MODEL_CATALOG_DATA.prices.items()
 }
 
 

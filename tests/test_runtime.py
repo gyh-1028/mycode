@@ -1,4 +1,7 @@
+import pytest
+
 from mycode.agent.events import EventType, RunStatus
+from mycode.checkpoint import current_checkpoint
 from mycode.config import Config, ConfigLoadResult, ProviderConfig
 from mycode.llm.base import LLMResponse, StopReason, ToolCall
 from mycode.runtime import MyCodeRuntime
@@ -44,6 +47,76 @@ def test_runtime_runs_and_persists_session(tmp_path, monkeypatch) -> None:
     assert [event.type for event in events][0] == EventType.RUN_STARTED
     loaded = runtime.get_session(session.id)
     assert loaded.messages[-1] == {"role": "assistant", "content": "done"}
+
+
+def test_runtime_reuses_services_across_prompts_and_closes_once(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = FakeProvider(
+        [
+            LLMResponse(text="first", stop_reason=StopReason.END_TURN),
+            LLMResponse(text="second", stop_reason=StopReason.END_TURN),
+        ]
+    )
+    runtime = MyCodeRuntime(
+        config_result=ConfigLoadResult(config=Config(planning="off")),
+        provider=provider,
+        project_root=tmp_path,
+    )
+
+    class Registry:
+        started = False
+        starts = 0
+        stops = 0
+
+        def start(self):
+            self.started = True
+            self.starts += 1
+
+        def stop(self):
+            if self.started:
+                self.started = False
+                self.stops += 1
+
+    registry = Registry()
+    runtime._mcp_registry = registry  # type: ignore[assignment]
+    closed_roots = []
+    monkeypatch.setattr("mycode.runtime.close_service", lambda root: closed_roots.append(root))
+    session = runtime.new_session()
+
+    runtime.run_prompt(session, "first")
+    runtime.run_prompt(session, "second")
+
+    assert registry.starts == 1
+    assert registry.stops == 0
+    runtime.close()
+    runtime.close()
+    assert registry.stops == 1
+    assert closed_roots == [tmp_path]
+
+
+def test_runtime_resets_checkpoint_if_service_start_fails(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    runtime = MyCodeRuntime(
+        config_result=ConfigLoadResult(config=Config(planning="off")),
+        provider=FakeProvider([LLMResponse(text="unused")]),
+        project_root=tmp_path,
+    )
+
+    class FailingRegistry:
+        started = False
+
+        def start(self):
+            raise RuntimeError("registry failed")
+
+        def stop(self):
+            pass
+
+    runtime._mcp_registry = FailingRegistry()  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="registry failed"):
+        runtime.run_prompt(runtime.new_session(), "test")
+
+    assert current_checkpoint() is None
 
 
 def test_runtime_new_session_can_be_transient(tmp_path, monkeypatch) -> None:

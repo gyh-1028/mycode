@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import io
+import shutil
+import sqlite3
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from mycode.agent.runner import AgentRunner, RunRequest
 from mycode.codeintel.context import ContextSelector
@@ -37,6 +42,100 @@ def test_index_removes_deleted_files_and_skips_sensitive_paths(tmp_path: Path) -
     result = index.build()
     assert result.removed == 1
     assert index.status()["files"] == 0
+
+
+def test_index_closes_every_sqlite_connection(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "app.py"
+    source.write_text("def run():\n    return 1\n", encoding="utf-8")
+    real_connect = sqlite3.connect
+    connections: list[sqlite3.Connection] = []
+
+    def tracking_connect(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr("mycode.codeintel.index.sqlite3.connect", tracking_connect)
+    index = SymbolIndex(tmp_path)
+    index.build()
+    index.search_symbols("run")
+    index.status()
+
+    assert connections
+    for connection in connections:
+        with pytest.raises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
+
+
+def test_index_updates_explicit_paths_without_repository_scan(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "app.py"
+    source.write_text("def before():\n    return 1\n", encoding="utf-8")
+    index = SymbolIndex(tmp_path)
+    index.build()
+    source.write_text("def after_change():\n    return 2\n", encoding="utf-8")
+    monkeypatch.setattr(index, "discover_files", lambda: pytest.fail("unexpected full scan"))
+
+    result = index.update_paths(["app.py"])
+
+    assert result.indexed == 1
+    assert index.search_symbols("after_change")[0].location.path == "app.py"
+    assert index.search_symbols("before") == []
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
+def test_index_build_uses_git_change_set_when_head_is_unchanged(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("mycode.codeintel.index._GIT_BLOB_MIN_FILES", 1)
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    source = tmp_path / "app.py"
+    source.write_text("def before():\n    return 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "app.py"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=MyCode Test", "-c", "user.email=test@example.com", "commit", "-qm", "initial"],
+        cwd=tmp_path,
+        check=True,
+    )
+    index = SymbolIndex(tmp_path)
+    index.build()
+    source.write_text("def after_change():\n    return 200\n", encoding="utf-8")
+    monkeypatch.setattr(index, "discover_files", lambda: pytest.fail("unexpected full scan"))
+
+    result = index.build()
+
+    assert result.indexed == 1
+    assert index.search_symbols("after_change")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
+def test_git_incremental_detects_existing_untracked_file_changes(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    tracked = tmp_path / "tracked.py"
+    tracked.write_text("TRACKED = True\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.py"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=MyCode Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    source = tmp_path / "scratch.py"
+    source.write_text("def before():\n    return 1\n", encoding="utf-8")
+    index = SymbolIndex(tmp_path)
+    index.build()
+
+    source.write_text("def after_change():\n    return 2\n", encoding="utf-8")
+    result = index.build()
+
+    assert result.indexed == 1
+    assert index.search_symbols("after_change")
+    assert index.search_symbols("before") == []
 
 
 def test_context_selector_is_ephemeral_and_budgeted(tmp_path: Path) -> None:

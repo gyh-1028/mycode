@@ -81,19 +81,29 @@ class ContextSelector:
             max(0, int(context_limit * config.max_context_fraction)),
         )
         self._dirty = True
+        self._changed_paths: set[str] = set()
         self._last_errors: tuple[str, ...] = ()
 
-    def invalidate(self) -> None:
+    def invalidate(self, path: str | None = None) -> None:
         """Request an incremental rebuild before the next selection."""
         self._dirty = True
+        if path:
+            self._changed_paths.add(path)
+        else:
+            self._changed_paths.clear()
 
     def select(self, messages: list[dict[str, Any]]) -> ContextPacket:
         if not self.config.enabled or not self.config.auto_context or self.token_budget <= 0:
             return ContextPacket()
         if self._dirty:
-            build = self.index.build()
+            build = (
+                self.index.update_paths(sorted(self._changed_paths))
+                if self._changed_paths and self.index.db_path.exists()
+                else self.index.build()
+            )
             self._last_errors = build.errors
             self._dirty = False
+            self._changed_paths.clear()
         text = _recent_text(messages)
         terms = _terms(text)
         explicit = _explicit_paths(text)

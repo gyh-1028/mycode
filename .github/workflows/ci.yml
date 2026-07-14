@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    name: Python ${{ matrix.python }} / ${{ matrix.os }}
+  compatibility:
+    name: Compatibility ${{ matrix.python }} / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -31,10 +31,16 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev,all]"
-      - run: python -m pytest -q
-      - run: mycode eval run --json
+      - name: Cross-platform smoke tests
+        run: >-
+          python -m pytest -q -o addopts=
+          tests/test_permissions.py
+          tests/test_session.py
+          tests/test_models.py
+          tests/test_runtime.py
 
   package-python:
+    needs: [quality, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +49,7 @@ jobs:
           python-version: "3.14"
           cache: pip
       - run: python -m pip install build twine
+      - run: git diff --exit-code -- src/mycode/web/static
       - run: python -m build
       - run: python -m twine check dist/*
       - uses: actions/upload-artifact@v4
@@ -60,9 +67,10 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev,all]"
-      - run: ruff check src tests
+      - run: ruff check src tests scripts
       - run: pyright
       - run: python -m pytest -q --cov=mycode --cov-report=term-missing --cov-fail-under=80
+      - run: mycode eval run --json
 
   vscode:
     runs-on: ubuntu-latest
@@ -109,6 +117,8 @@ jobs:
         working-directory: clients/web
       - run: npm run build
         working-directory: clients/web
+      - name: Verify bundled Web assets are current
+        run: git diff --exit-code -- src/mycode/web/static
       - run: npx playwright install --with-deps chromium
         working-directory: clients/web
       - name: Playwright local workbench smoke test

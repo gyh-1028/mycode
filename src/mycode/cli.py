@@ -43,6 +43,7 @@ from mycode.git_ops import (
 from mycode.llm import build_provider
 from mycode.logging_config import setup_logging
 from mycode.model_store import (
+    MODEL_CATALOG_METADATA,
     PRESETS,
     CredentialStore,
     ModelProfile,
@@ -52,6 +53,7 @@ from mycode.model_store import (
 )
 from mycode.permissions import SECURITY_NOTICE
 from mycode.plugins import format_plugin_list, list_discovered_plugins
+from mycode.pricing import price_for_model
 from mycode.runtime import MyCodeRuntime
 from mycode.session import Session, SessionError
 from mycode.skills import discover_skills, format_skill_list
@@ -646,6 +648,12 @@ def _profile_key_source(profile: ModelProfile) -> str:
     return "missing"
 
 
+def _close_runtime(runtime: object) -> None:
+    close = getattr(runtime, "close", None)
+    if callable(close):
+        close()
+
+
 def _handle_doctor(args: list[str] | None = None) -> None:
     args = [] if args is None else args
     check_api = _has_flag(args, "--api")
@@ -668,6 +676,20 @@ def _handle_doctor(args: list[str] | None = None) -> None:
             typer.secho(f"  {language} LSP: {' '.join(command)}", fg=typer.colors.GREEN)
         else:
             typer.secho(f"  {language} LSP: 未找到，将使用本地降级", fg=typer.colors.YELLOW)
+    catalog_version = MODEL_CATALOG_METADATA["catalog_version"]
+    verified_at = MODEL_CATALOG_METADATA["verified_at"] or "未验证"
+    pricing_verified_at = MODEL_CATALOG_METADATA["pricing_verified_at"] or "未验证"
+    typer.echo(f"模型目录: v{catalog_version}（模型 {verified_at}，价格 {pricing_verified_at}）")
+    price = price_for_model(cfg.default_model, cfg.pricing)
+    if price is None:
+        typer.secho(
+            f"当前模型价格: 未知（{cfg.default_model}）；真实 Eval 需要显式价格或允许未知价格",
+            fg=typer.colors.YELLOW,
+        )
+    else:
+        typer.echo(
+            f"当前模型价格: 输入 ${price.input:g} / 输出 ${price.output:g}（每百万 Token）"
+        )
     sessions = Session.list_all()
     corrupt_count = Session.corrupt_count()
     typer.echo(f"会话文件: {len(sessions)} 个")
@@ -993,7 +1015,10 @@ def main(
 
     if task is not None:
         typer.secho(f"任务:{task}", fg=typer.colors.CYAN, bold=True)
-        result = runtime.run_prompt(session, task, budget_usd=budget)
+        try:
+            result = runtime.run_prompt(session, task, budget_usd=budget)
+        finally:
+            _close_runtime(runtime)
         if result.trace_path:
             typer.secho(f"Trace 已保存:{result.trace_path}", fg=typer.colors.BRIGHT_BLACK)
         if commit_state is not None and commit_state.enabled:
@@ -1002,7 +1027,10 @@ def main(
                 typer.echo(auto_commit_checkpoint(runtime.provider, checkpoint, state=commit_state))
         return
 
-    _run_repl(runtime, session, config_result, commit_state, budget)
+    try:
+        _run_repl(runtime, session, config_result, commit_state, budget)
+    finally:
+        _close_runtime(runtime)
 
 
 def _run_repl(

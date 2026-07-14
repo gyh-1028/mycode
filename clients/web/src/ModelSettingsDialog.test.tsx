@@ -30,6 +30,9 @@ const form: ModelFormState = {
   thinkingFormat: "standard",
   thinkingBudget: "",
   reasoningEffort: "",
+  maxTokens: "",
+  temperature: "",
+  topP: "",
 };
 
 afterEach(cleanup);
@@ -50,6 +53,7 @@ describe("ModelSettingsDialog", () => {
       onModelChange={onModelChange}
       onSave={vi.fn()}
       onUse={vi.fn()}
+      onEdit={vi.fn()}
       onDeleteRequest={vi.fn()}
       onRemove={vi.fn()}
     />);
@@ -76,7 +80,7 @@ describe("ModelSettingsDialog", () => {
     const { unmount } = render(<ModelSettingsDialog
       profiles={[]} presets={[]} catalogs={[effortCatalog]} form={effortForm} busy={false}
       onClose={vi.fn()} onFormChange={vi.fn()} onProviderChange={vi.fn()} onModelChange={vi.fn()}
-      onSave={vi.fn()} onUse={vi.fn()} onDeleteRequest={vi.fn()} onRemove={vi.fn()}
+      onSave={vi.fn()} onUse={vi.fn()} onEdit={vi.fn()} onDeleteRequest={vi.fn()} onRemove={vi.fn()}
     />);
     expect(screen.getByLabelText("推理程度")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "思考" })).not.toBeInTheDocument();
@@ -93,7 +97,7 @@ describe("ModelSettingsDialog", () => {
       profiles={[]} presets={[]} catalogs={[qwenCatalog]}
       form={{ ...form, catalogId: "qwen", thinking: "enabled", thinkingFormat: "qwen" }} busy={false}
       onClose={vi.fn()} onFormChange={vi.fn()} onProviderChange={vi.fn()} onModelChange={vi.fn()}
-      onSave={vi.fn()} onUse={vi.fn()} onDeleteRequest={vi.fn()} onRemove={vi.fn()}
+      onSave={vi.fn()} onUse={vi.fn()} onEdit={vi.fn()} onDeleteRequest={vi.fn()} onRemove={vi.fn()}
     />);
     expect(screen.getByLabelText("思考预算（Token）")).toBeInTheDocument();
   });

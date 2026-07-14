@@ -26,6 +26,10 @@ class _FakeRuntime:
         self.sessions: list[Session] = []
         self.last_run_kwargs: dict = {}
         self.compacted_session: Session | None = None
+        self.close_count = 0
+
+    def close(self) -> None:
+        self.close_count += 1
 
     def new_session(self, *, persist: bool = True) -> Session:
         session = Session.new(
@@ -83,6 +87,20 @@ class _BlockingRuntime(_FakeRuntime):
                 return AgentRunResult(run_id=run_id, status=RunStatus.CANCELLED, final_text=None)
             time.sleep(0.005)
         return AgentRunResult(run_id=run_id, status=RunStatus.COMPLETED, final_text="late")
+
+
+class _DoubleApprovalRuntime(_FakeRuntime):
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.approvals: list[bool] = []
+
+    def run_prompt(self, session, prompt, *, sink, approval, run_id, **kwargs):
+        sink(make_event(run_id, 1, EventType.RUN_STARTED, 1.0), {})
+        request = ApprovalRequest(kind="command", prompt="确认?", command="pytest", risk="read")
+        for _ in range(2):
+            self.approvals.append(approval(request))
+        sink(make_event(run_id, 2, EventType.RUN_FINISHED, 2.0, payload={"status": "completed"}), {})
+        return AgentRunResult(run_id=run_id, status=RunStatus.COMPLETED, final_text="ok")
 
 
 def _request(method: str, params=None, request_id=1):
@@ -150,6 +168,36 @@ def test_run_events_and_permission_round_trip(tmp_path, monkeypatch) -> None:
     assert any(item.get("method") == "run/result" and item["params"]["status"] == "completed" for item in messages)
 
 
+def test_permission_can_be_remembered_for_current_run(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    output = io.StringIO()
+    runtime = _DoubleApprovalRuntime(tmp_path)
+    server = StdioServer(writer=RpcWriter(output), runtime=runtime, approval_timeout=2.0)  # type: ignore[arg-type]
+    server.handle(_request("initialize", {"workspace": str(tmp_path)}))
+    server.handle(_request("run/start", {"prompt": "test"}, request_id=2))
+
+    approval_id = None
+    for _ in range(100):
+        requests = [item for item in _lines(output) if item.get("method") == "permission/request"]
+        if requests:
+            approval_id = requests[-1]["params"]["approvalId"]
+            break
+        time.sleep(0.01)
+    assert approval_id is not None
+    server.handle(
+        _request(
+            "permission/respond",
+            {"approvalId": approval_id, "approved": True, "scope": "run"},
+            request_id=3,
+        )
+    )
+    server._run_thread.join(timeout=2.0)
+
+    requests = [item for item in _lines(output) if item.get("method") == "permission/request"]
+    assert len(requests) == 1
+    assert runtime.approvals == [True, True]
+
+
 def test_run_start_passes_collaboration_and_permission_modes(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     output = io.StringIO()
@@ -212,6 +260,23 @@ def test_active_run_can_be_cancelled(tmp_path, monkeypatch) -> None:
     assert cancelled["result"]["cancelled"] is True
     server._run_thread.join(timeout=2.0)
     assert any(message.get("method") == "run/result" and message["params"]["status"] == RunStatus.CANCELLED for message in _lines(output))
+
+
+def test_active_run_rejects_session_switch(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    output = io.StringIO()
+    runtime = _BlockingRuntime(tmp_path)
+    session = runtime.new_session()
+    server = StdioServer(writer=RpcWriter(output), runtime=runtime)  # type: ignore[arg-type]
+    server.handle(_request("initialize", {"workspace": str(tmp_path)}))
+    started = server.handle(_request("run/start", {"prompt": "wait", "sessionId": session.id}, request_id=2))
+    assert runtime.entered.wait(timeout=1.0)
+
+    opened = server.handle(_request("session/open", {"sessionId": session.id}, request_id=3))
+
+    assert opened["error"]["code"] == -32010
+    server.handle(_request("run/cancel", {"runId": started["result"]["runId"]}, request_id=4))
+    server._run_thread.join(timeout=2.0)
 
 
 def test_protocol_examples_validate_against_schema() -> None:

@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mycode-ai/mycode.git"
+    "url": "https://github.com/gyh-1028/mycode.git"
   },
   "engines": {
     "vscode": "^1.95.0"

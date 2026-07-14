@@ -302,6 +302,8 @@ def test_doctor_reports_config_and_missing_key(monkeypatch, tmp_path) -> None:
     assert result.exit_code == 1
     assert "MISSING_TEST_KEY" in result.output
     assert "配置来源" in result.output
+    assert "模型目录: v1" in result.output
+    assert "当前模型价格: 未知" in result.output
 
 
 def test_config_show_masks_api_key_value(monkeypatch, tmp_path) -> None:

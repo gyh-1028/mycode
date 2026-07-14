@@ -555,7 +555,45 @@ Local Web UI ────> JSON-RPC WebSocket ┘
 - `runtime.py` 统一创建/恢复 Session、Checkpoint、MCP 生命周期、AgentRunner 和一致状态存档。
 - `tui/` 只投影 `AgentEvent`，不建立第二份业务状态。
 - `server/` 实现 line-delimited JSON-RPC 2.0 协议 v1，stdout 不承载日志或普通 UI 文本。
-- `server.RpcSession` 是 transport-neutral 协议核心；`web/` 只监听 `127.0.0.1` 并提供令牌认证的 WebSocket transport。
-- `clients/web/` 是 React/Vite 工作台，提供只读工作区浏览、模型凭据管理、Diff 和审批。
+- `server.RpcSession` 是 transport-neutral 协议核心；它负责运行中会话隔离、精确到操作的本轮审批缓存和 Checkpoint Undo；`web/` 只监听 `127.0.0.1` 并提供令牌认证的 WebSocket transport。
+- `clients/web/` 是 React/Vite 工作台，提供只读工作区浏览、文件/选区上下文、结构化活动/Diff/上下文检查器、模型凭据管理和审批。
 - `editors/vscode/` 运行在 workspace extension host；Python 服务 cwd 即受权限层约束的项目根目录。
 - `pyproject.toml` 发行名为 `mycode-ai-cli`，通过 extras 分离 `tui`、`mcp`、`trace`；CI 覆盖 Python 3.11-3.14 和 VSIX。
+
+## 11. 0.2.2 可靠性加固
+
+### 持久化协议
+
+- `persistence.py` 提供跨进程 advisory lock、唯一临时文件、`fsync` 和原子替换。
+- Session 与模型配置在加载时保存原始字节指纹；保存前发现磁盘已变化会抛出冲突错误，
+  不再静默覆盖另一进程的修改。
+- Checkpoint 写入使用同一持久化原语；Undo 在执行时重新校验每个路径，防止清单被篡改后越界恢复。
+
+### Runtime 生命周期
+
+- `MyCodeRuntime` 在生命周期内复用 MCP Registry 与代码智能服务，不再每轮重复启动进程。
+- CLI、TUI、RPC 关闭和模型切换均释放旧 Runtime；`close()` 幂等。
+- SQLite 连接由索引事务作用域持有并在退出时关闭。
+
+### 模型目录
+
+- `data/model_catalog-v1.json` 是模型、思考能力和价格的单一版本化数据源。
+- `catalog.py` 校验 schema、默认模型、显示文本和价格结构。
+- `model/list` 返回目录版本与验证时间；`doctor` 显示当前模型价格已知/未知。
+- 未复核的数据保持空验证时间，真实 Eval 不会在未知价格下静默绕过预算。
+
+### 代码索引热路径
+
+- 普通增量构建使用内容哈希和批量 SQLite 写入。
+- Git 仓库保存上次 HEAD，并通过变更集定位新增、修改和删除文件。
+- 大型 Git 仓库可通过 `git cat-file --batch` 读取未修改 tracked blob，减少 Windows 小文件打开成本。
+- Agent 写工具完成后直接将变更路径传给 `ContextSelector.invalidate()`，下一次选择只更新相关文件。
+
+### 前端与发布门禁
+
+- Web 完全信任不会持久化；会话和模型边界自动恢复标准确认。
+- URL fragment 中的启动令牌会交换到标签页 `sessionStorage`，刷新可自动重连，关闭标签页后清除。
+- 运行期间锁定 Session；终态事件触发 Session、Diff、文件树和已打开变更文件的同步刷新。
+- Playwright 除截图外检查主区域重叠、横向溢出和无可访问名称的图标按钮。
+- CI 只在一个质量 job 运行全量覆盖率与离线 Eval；跨平台矩阵执行持久化、权限和 Runtime smoke。
+- Python 构建依赖 Web job，并校验提交的静态资源与 Vite 构建一致；release 同样重新构建 Web。

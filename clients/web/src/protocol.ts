@@ -59,6 +59,41 @@ export interface OpenFile {
   lines: number;
 }
 
+export interface CodeSelection {
+  path: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+}
+
+export interface DiffFile {
+  path: string;
+  kind: string;
+  diff: string;
+}
+
+export interface SessionDiff {
+  checkpointId: string | null;
+  files: DiffFile[];
+  diff: string;
+}
+
+export interface ContextItem {
+  path: string;
+  symbol?: string | null;
+  reason: string;
+  score: number;
+  start_line: number;
+  end_line: number;
+}
+
+export interface ContextSelection {
+  estimated_tokens: number;
+  paths: string[];
+  items: ContextItem[];
+  degraded: string[];
+}
+
 export interface ModelProfile {
   name: string;
   provider: string;
@@ -67,6 +102,7 @@ export interface ModelProfile {
   apiKeyEnv?: string | null;
   maxTokens?: number | null;
   temperature?: number | null;
+  topP?: number | null;
   thinking?: "enabled" | "disabled" | null;
   thinkingFormat?: string | null;
   thinkingBudget?: number | null;
@@ -118,6 +154,9 @@ export interface ModelFormState {
   thinkingFormat: string;
   thinkingBudget: string;
   reasoningEffort: string;
+  maxTokens: string;
+  temperature: string;
+  topP: string;
 }
 
 export interface PermissionRequest {
@@ -129,6 +168,7 @@ export interface PermissionRequest {
   diff?: string;
   command?: string;
   risk?: string;
+  canRememberForRun?: boolean;
 }
 
 export type CollaborationMode = "default" | "plan" | "review";

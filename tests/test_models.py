@@ -3,11 +3,20 @@ from __future__ import annotations
 import sys
 from types import SimpleNamespace
 
+import pytest
 from typer.testing import CliRunner
 
 from mycode.cli import app
 from mycode.config import ProviderConfig, load_config_result
-from mycode.model_store import MODEL_CATALOGS, PRESETS, CredentialStore, ModelProfile, ModelStore, profile_from_preset
+from mycode.model_store import (
+    MODEL_CATALOGS,
+    PRESETS,
+    CredentialStore,
+    ModelProfile,
+    ModelStore,
+    ModelStoreConflictError,
+    profile_from_preset,
+)
 
 runner = CliRunner()
 
@@ -29,6 +38,21 @@ def test_model_store_roundtrip_and_active_overlay(tmp_path, monkeypatch) -> None
     assert config.provider.profile == "claude"
     assert config.provider.type == "anthropic"
     assert config.default_model == "claude-sonnet-5"
+
+
+def test_stale_model_store_save_is_rejected(tmp_path) -> None:
+    path = tmp_path / "models.toml"
+    initial = ModelStore(path=path)
+    initial.add(profile_from_preset("deepseek", profile_name="work"))
+    first = ModelStore.load(path)
+    stale = ModelStore.load(path)
+
+    first.add(profile_from_preset("anthropic", profile_name="claude"))
+    with pytest.raises(ModelStoreConflictError):
+        stale.add(profile_from_preset("openai", profile_name="openai"))
+
+    loaded = ModelStore.load(path)
+    assert set(loaded.profiles) == {"work", "claude"}
 
 
 def test_provider_key_environment_has_priority(monkeypatch) -> None:

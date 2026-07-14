@@ -97,6 +97,23 @@ def test_session_diff_uses_latest_checkpoint(tmp_path, monkeypatch) -> None:
     assert "+after" in result["diff"]
 
 
+def test_session_undo_restores_latest_checkpoint(tmp_path, monkeypatch) -> None:
+    target = tmp_path / "app.py"
+    target.write_text("before\n", encoding="utf-8")
+    rpc = _session(tmp_path, monkeypatch)
+    session = rpc.dispatch("session/new", {})["session"]
+    checkpoint = Checkpoint.begin(session_id=session["id"], task="edit", root=tmp_path)
+    checkpoint.record_write(target, "before\n", True)
+    target.write_text("after\n", encoding="utf-8")
+
+    result = rpc.dispatch("session/undo", {"sessionId": session["id"]})
+
+    assert result["undone"] is True
+    assert result["files"] == ["app.py"]
+    assert target.read_text(encoding="utf-8") == "before\n"
+    assert rpc.dispatch("session/diff", {"sessionId": session["id"]})["checkpointId"] is None
+
+
 def test_session_compact_rpc(tmp_path, monkeypatch) -> None:
     rpc = _session(tmp_path, monkeypatch)
     session = rpc.dispatch("session/new", {})["session"]
@@ -141,6 +158,8 @@ def test_model_save_never_returns_secret(tmp_path, monkeypatch) -> None:
     assert listed["profiles"][0]["thinkingFormat"] == "qwen"
     assert listed["profiles"][0]["thinkingBudget"] == 8192
     assert listed["profiles"][0]["reasoningEffort"] == "high"
+    assert listed["catalogMetadata"]["schema_version"] == 1
+    assert listed["catalogMetadata"]["catalog_version"]
     assert {catalog["id"] for catalog in listed["catalogs"]} == {"anthropic", "deepseek", "gemini", "glm", "kimi", "kimi-coding", "minimax", "openai", "qwen"}
     deepseek = next(item for item in listed["catalogs"] if item["id"] == "deepseek")
     assert {item["id"] for item in deepseek["models"]} >= {"deepseek-v4-flash", "deepseek-v4-pro"}
@@ -158,9 +177,22 @@ def test_model_use_rebuilds_runtime_and_starts_new_session(tmp_path, monkeypatch
         return _ProfileRuntime(tmp_path, active)
 
     rpc = _session(tmp_path, monkeypatch, runtime_factory=factory)
+    previous_runtime = rpc.runtime
     result = rpc.dispatch("model/use", {"name": "second"})
 
     assert result["runtime"]["model"] == "model-two"
     assert result["runtime"]["provider"] == "anthropic"
     assert result["session"]["model"] == "model-two"
     assert ModelStore.load().active == "second"
+    assert previous_runtime is not None
+    assert previous_runtime.close_count == 1
+
+
+def test_rpc_close_releases_runtime(tmp_path, monkeypatch) -> None:
+    rpc = _session(tmp_path, monkeypatch)
+    runtime = rpc.runtime
+
+    rpc.close()
+
+    assert runtime is not None
+    assert runtime.close_count == 1

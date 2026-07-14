@@ -2,6 +2,8 @@ include CHANGELOG.md
 recursive-include docs *.md *.png
 recursive-include schemas *.json
 recursive-include src/mycode/web/static *
+recursive-include src/mycode/data *.json
+recursive-include scripts *.py
 include clients/web/index.html
 include clients/web/package.json
 include clients/web/package-lock.json

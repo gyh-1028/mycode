@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import tempfile
+from contextlib import chdir
 from pathlib import Path
 
 import uvicorn
@@ -29,24 +30,30 @@ def main() -> None:
             encoding="utf-8",
         )
         (root / "README.md").write_text("# Preview workspace\n", encoding="utf-8")
-        os.chdir(root)
-        os.environ["MYCODE_MODELS_FILE"] = str(root / "models.toml")
-        runtime = _FakeRuntime(root, ask=True)
-        session = runtime.new_session()
-        session.messages.extend(
-            [
-                {"role": "user", "content": "请检查项目结构，并优化 greet 函数的错误处理。"},
-                {"role": "assistant", "content": "我会先读取 `src/app.py`，确认调用方式后再给出修改。"},
-            ]
-        )
-        session.save(session.messages)
-        app = create_web_app(
-            token=args.token,
-            allowed_origin=f"http://127.0.0.1:{args.port}",
-            static_dir=repo / "src" / "mycode" / "web" / "static",
-            runtime_factory=lambda **kwargs: runtime,
-        )
-        uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning", access_log=False)
+        with chdir(root):
+            os.environ["MYCODE_MODELS_FILE"] = str(root / "models.toml")
+            runtime = _FakeRuntime(root, ask=True)
+            session = runtime.new_session()
+            session.messages.extend(
+                [
+                    {"role": "user", "content": "请检查项目结构，并优化 greet 函数的错误处理。"},
+                    {"role": "assistant", "content": "我会先读取 `src/app.py`，确认调用方式后再给出修改。"},
+                ]
+            )
+            session.save(session.messages)
+            app = create_web_app(
+                token=args.token,
+                allowed_origin=f"http://127.0.0.1:{args.port}",
+                static_dir=repo / "src" / "mycode" / "web" / "static",
+                runtime_factory=lambda **kwargs: runtime,
+            )
+            uvicorn.run(
+                app,
+                host="127.0.0.1",
+                port=args.port,
+                log_level="warning",
+                access_log=False,
+            )
 
 
 if __name__ == "__main__":

@@ -25,13 +25,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from mycode.persistence import atomic_write_text, bytes_fingerprint, file_fingerprint, path_lock
 
 CURRENT_SCHEMA_VERSION = 1
 LEGACY_SCHEMA_VERSION = 0
@@ -47,6 +48,10 @@ class SessionError(Exception):
 
 class UnsupportedSchemaError(SessionError):
     """Session file was written by a newer client."""
+
+
+class SessionConflictError(SessionError):
+    """The session changed on disk after this object was loaded."""
 
 
 def _now_iso() -> str:
@@ -212,6 +217,7 @@ class Session:
     messages: list[dict[str, Any]]
     base_dir: Path
     schema_version: int = CURRENT_SCHEMA_VERSION
+    _fingerprint: str | None = field(default=None, repr=False, compare=False)
 
     @property
     def path(self) -> Path:
@@ -243,8 +249,7 @@ class Session:
     # -- persistence -------------------------------------------------------- #
     def save(self, messages: list[dict[str, Any]]) -> None:
         """原子写入当前 messages(写临时文件后 os.replace,避免半截文件)。"""
-        self.messages = messages
-        self.updated_at = _now_iso()
+        updated_at = _now_iso()
         self.base_dir.mkdir(parents=True, exist_ok=True)
         payload = {
             "id": self.id,
@@ -252,31 +257,41 @@ class Session:
             "provider": self.provider,
             "schema_version": self.schema_version,
             "created_at": self.created_at,
-            "updated_at": self.updated_at,
+            "updated_at": updated_at,
             "messages": messages,
         }
-        tmp = self.base_dir / f"{self.id}.json.tmp"
-        tmp.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        os.replace(tmp, self.path)
+        content = json.dumps(payload, ensure_ascii=False, indent=2)
+        with path_lock(self.path):
+            if file_fingerprint(self.path) != self._fingerprint:
+                raise SessionConflictError(
+                    f"session changed on disk; reload before saving: {self.id}"
+                )
+            self._fingerprint = atomic_write_text(self.path, content)
+        self.messages = messages
+        self.updated_at = updated_at
 
     # -- loading ------------------------------------------------------------ #
     @classmethod
-    def _load_raw(cls, path: Path) -> dict[str, Any]:
+    def _load_raw(cls, path: Path) -> tuple[dict[str, Any], str]:
         try:
-            text = path.read_text(encoding="utf-8")
-        except OSError as exc:
+            raw = path.read_bytes()
+            text = raw.decode("utf-8")
+        except (OSError, UnicodeError) as exc:
             raise SessionError(f"无法读取会话文件 {path}: {exc}") from exc
         try:
             data = json.loads(text)
         except json.JSONDecodeError as exc:
             raise SessionError(f"会话文件 JSON 解析失败 {path}: {exc}") from exc
-        return data
+        return data, bytes_fingerprint(raw)
 
     @classmethod
     def _from_data(
-        cls, data: dict[str, Any], base_dir: Path, *, source: str
+        cls,
+        data: dict[str, Any],
+        base_dir: Path,
+        *,
+        source: str,
+        fingerprint: str | None = None,
     ) -> Session:
         data = _migrate(data)
         _validate_data(data, source=source)
@@ -289,13 +304,19 @@ class Session:
             messages=data.get("messages", []),
             base_dir=base_dir,
             schema_version=data.get("schema_version", CURRENT_SCHEMA_VERSION),
+            _fingerprint=fingerprint,
         )
 
     @classmethod
     def _from_file(cls, path: Path, base_dir: Path) -> Session | None:
         try:
-            data = cls._load_raw(path)
-            return cls._from_data(data, base_dir=base_dir, source=str(path))
+            data, fingerprint = cls._load_raw(path)
+            return cls._from_data(
+                data,
+                base_dir=base_dir,
+                source=str(path),
+                fingerprint=fingerprint,
+            )
         except (OSError, json.JSONDecodeError, SessionError):
             _LOGGER.warning("corrupt session skipped during scan: %s", path)
             return None
@@ -311,8 +332,13 @@ class Session:
         path = directory / f"{session_id}.json"
         if not path.is_file():
             return None
-        data = cls._load_raw(path)
-        return cls._from_data(data, base_dir=directory, source=str(path))
+        data, fingerprint = cls._load_raw(path)
+        return cls._from_data(
+            data,
+            base_dir=directory,
+            source=str(path),
+            fingerprint=fingerprint,
+        )
 
     @classmethod
     def list_all(cls, base_dir: str | Path | None = None) -> list[Session]:
@@ -341,8 +367,8 @@ class Session:
         count = 0
         for p in directory.glob("*.json"):
             try:
-                data = cls._load_raw(p)
-                cls._from_data(data, directory, source=str(p))
+                data, fingerprint = cls._load_raw(p)
+                cls._from_data(data, directory, source=str(p), fingerprint=fingerprint)
             except (OSError, json.JSONDecodeError, SessionError):
                 count += 1
         return count

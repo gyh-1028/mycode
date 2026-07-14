@@ -7,9 +7,10 @@ interface FileTreeProps {
   load(path: string): Promise<FileEntry[]>;
   open(path: string): void;
   activePath?: string;
+  onError?(error: unknown): void;
 }
 
-function Node({ entry, load, open, activePath }: { entry: FileEntry } & Omit<FileTreeProps, "entries">): React.JSX.Element {
+function Node({ entry, load, open, activePath, onError }: { entry: FileEntry } & Omit<FileTreeProps, "entries">): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FileEntry[]>();
   async function toggle(): Promise<void> {
@@ -19,7 +20,13 @@ function Node({ entry, load, open, activePath }: { entry: FileEntry } & Omit<Fil
     }
     const next = !expanded;
     setExpanded(next);
-    if (next && children === undefined) setChildren(await load(entry.path));
+    if (next && children === undefined) {
+      try { setChildren(await load(entry.path)); }
+      catch (error) {
+        setExpanded(false);
+        onError?.(error);
+      }
+    }
   }
   return <div className="tree-node">
     <button className={`tree-row ${activePath === entry.path ? "selected" : ""} ${entry.type === "directory" ? (expanded ? "directory expanded" : "directory") : "file"}`} onClick={() => void toggle()} title={entry.path}>
@@ -28,7 +35,7 @@ function Node({ entry, load, open, activePath }: { entry: FileEntry } & Omit<Fil
       <span>{entry.name}</span>
     </button>
     {expanded && children && <div className="tree-children">
-      {children.map((child) => <Node key={child.path} entry={child} load={load} open={open} activePath={activePath} />)}
+      {children.map((child) => <Node key={child.path} entry={child} load={load} open={open} activePath={activePath} onError={onError} />)}
     </div>}
   </div>;
 }

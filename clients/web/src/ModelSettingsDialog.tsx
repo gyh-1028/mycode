@@ -1,4 +1,5 @@
-import { BrainCircuit, KeyRound, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { BrainCircuit, KeyRound, Pencil, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { ModelCatalog, ModelFormState, ModelProfile } from "./protocol";
 
 interface ModelSettingsDialogProps {
@@ -14,6 +15,7 @@ interface ModelSettingsDialogProps {
   onModelChange: (model: string) => void;
   onSave: (event: React.FormEvent) => void;
   onUse: (name: string) => void;
+  onEdit: (profile: ModelProfile) => void;
   onDeleteRequest: (name?: string) => void;
   onRemove: (name: string) => void;
 }
@@ -40,9 +42,13 @@ export function ModelSettingsDialog({
   onModelChange,
   onSave,
   onUse,
+  onEdit,
   onDeleteRequest,
   onRemove,
 }: ModelSettingsDialogProps): React.JSX.Element {
+  const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const catalog = catalogs.find((item) => item.id === form.catalogId);
   const selectedModel = catalog?.models.find((item) => item.id === form.model);
   const fixedThinking = selectedModel?.thinking === "enabled" || selectedModel?.thinking === "disabled";
@@ -54,8 +60,40 @@ export function ModelSettingsDialog({
     onFormChange({ ...form, ...update });
   }
 
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const focusable = (): HTMLElement[] => [...dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex='-1'])")];
+    focusable()[0]?.focus();
+    const handleKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      previous?.focus();
+    };
+  }, []);
+
   return <div className="modal-backdrop" role="presentation">
-    <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="模型设置">
+    <section ref={dialogRef} className="settings-dialog" role="dialog" aria-modal="true" aria-label="模型设置">
       <header>
         <div><h2>模型与凭据</h2><p>选择服务商、具体模型和思考方式。API Key 只写入系统凭据库。</p></div>
         <button className="icon-button" onClick={onClose} title="关闭"><X size={18} /></button>
@@ -65,12 +103,12 @@ export function ModelSettingsDialog({
           <h3>已保存配置</h3>
           {profiles.length === 0 && <div className="settings-empty">还没有模型配置</div>}
           {profiles.map((profile) => <div className={`profile-row ${profile.active ? "active" : ""}`} key={profile.name}>
-            <div>
-              <strong>{profile.name}</strong>
+            <button className="profile-main" type="button" onClick={() => onEdit(profile)} title={`编辑 ${profile.name}`}>
+              <span><strong>{profile.name}</strong><Pencil size={12} /></span>
               <span>{profile.model}</span>
               <small>{thinkingLabel(profile)} · {profile.keyConfigured ? profile.keySource : "密钥未配置"}</small>
-            </div>
-            <button disabled={profile.active || busy} onClick={() => onUse(profile.name)}>{profile.active ? "当前" : "使用"}</button>
+            </button>
+            <button className="use-profile" disabled={profile.active || busy} onClick={() => onUse(profile.name)}>{profile.active ? "当前" : "使用"}</button>
             <button className="icon-button" disabled={profile.active || busy} onClick={() => onDeleteRequest(`model:${profile.name}`)} title="删除配置"><Trash2 size={14} /></button>
             {pendingDelete === `model:${profile.name}` && <div className="inline-confirm"><span>同时删除凭据？</span><button onClick={() => onDeleteRequest()}>取消</button><button className="danger" onClick={() => onRemove(profile.name)}>删除</button></div>}
           </div>)}
@@ -135,6 +173,11 @@ export function ModelSettingsDialog({
               <label>Provider<input required value={form.provider} onChange={(event) => setForm({ provider: event.target.value })} /></label>
               <label>Base URL<input value={form.baseUrl} onChange={(event) => setForm({ baseUrl: event.target.value })} placeholder="可选" /></label>
               <label>环境变量<input value={form.apiKeyEnv} onChange={(event) => setForm({ apiKeyEnv: event.target.value })} placeholder="存在时优先" /></label>
+              <div className="field-grid advanced-number-grid">
+                <label>最大输出 Token<input type="number" min="1" value={form.maxTokens} onChange={(event) => setForm({ maxTokens: event.target.value })} placeholder="模型默认" /></label>
+                <label>Temperature<input type="number" min="0" max="2" step="0.1" value={form.temperature} onChange={(event) => setForm({ temperature: event.target.value })} placeholder="模型默认" /></label>
+              </div>
+              <label>Top P<input type="number" min="0" max="1" step="0.05" value={form.topP} onChange={(event) => setForm({ topP: event.target.value })} placeholder="模型默认" /></label>
             </div>
           </details>
 

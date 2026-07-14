@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from mycode.permissions import check_write_path
+from mycode.persistence import atomic_write_text, path_lock
 
 CHECKPOINTS_DIR = Path(".mycode") / "checkpoints"
 
@@ -111,12 +113,14 @@ class Checkpoint:
             "files": [file.to_dict() for file in self.files],
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, self.path)
+        content = json.dumps(payload, ensure_ascii=False, indent=2)
+        with path_lock(self.path):
+            atomic_write_text(self.path, content)
 
     def record_write(self, target: Path, original: str, existed: bool) -> None:
-        resolved = target.resolve()
+        resolved, error = check_write_path(target, self.root)
+        if error is not None or resolved is None:
+            raise PermissionError(error or f"checkpoint path denied: {target}")
         rel = resolved.relative_to(self.root).as_posix()
         existing = next((item for item in self.files if item.path == rel), None)
         if existing is not None:
@@ -140,7 +144,10 @@ class Checkpoint:
         deleted = 0
         errors: list[str] = []
         for change in reversed(self.files):
-            target = (self.root / change.path).resolve()
+            target, denial = check_write_path(change.path, self.root)
+            if denial is not None or target is None:
+                errors.append(f"{change.path}:{denial or 'path denied'}")
+                continue
             try:
                 if change.kind == "created":
                     if target.exists():

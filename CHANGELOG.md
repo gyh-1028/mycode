@@ -15,11 +15,30 @@ All notable changes to MyCode are documented in this file. The project follows
 - Moved command and diff approvals from the activity inspector into a blocking approval dialog.
 - Corrected Kimi Coding Plan to low/high effort with Thinking fixed on, and added Kimi K2.7 Code.
 - API keys stored in the operating-system credential vault through `keyring`; environment variables remain supported and take precedence.
+- Added a versioned, validated model catalog with package metadata and pricing lookup.
+- Added a repeatable code-intelligence benchmark for cold and incremental indexing.
+- Added structured Web activity, per-file diff, context inspection, file/selection attachments, and checkpoint undo.
+- Added Web session filtering, quick model switching, plan execution, and run-scoped exact-operation approvals.
 
 ### Changed
 
 - `doctor`, `config show`, and REPL `/model` report the active model profile and credential source without exposing secret values.
 - The `web` extra now installs a WebSocket protocol implementation required by the browser workbench.
+- Session, model-profile, and checkpoint files now use locked, durable atomic writes with stale-writer conflict detection.
+- Runtime instances reuse and explicitly close MCP and code-intelligence services across prompts.
+- Code intelligence uses Git-aware incremental updates, batched SQLite writes, and a large-repository object reader.
+- CI and release workflows now enforce Python quality gates, offline evals, Web tests, package checks, and static-asset consistency.
+- Web authentication exchanges the URL fragment for a tab-scoped token and automatically reconnects after refresh.
+
+### Fixed
+
+- Revalidate checkpoint write and undo paths to reject project escapes and symlink retargeting.
+- Do not persist or restore full-trust Web permissions across browser sessions, sessions, or model switches.
+- Close SQLite and runtime resources deterministically, including startup-failure paths.
+- Detect modified untracked files during incremental indexing.
+- Repair corrupted provider and model display text and clean Windows Web-preview shutdown.
+- Prevent session switching during active runs, retain terminal errors, and refresh changed workspace files after a run.
+- Print the authenticated launch URL when `mycode web --no-open` is used.
 
 ## [0.2.2] - 2026-07-02
 

@@ -179,7 +179,7 @@ def run_web_server(*, port: int = 0, open_browser: bool = True) -> None:
     token = secrets.token_urlsafe(32)
     app = create_web_app(token=token, allowed_origin=origin)
     url = f"{origin}/#token={token}"
-    print(f"MyCode Web: {origin}")
+    print(f"MyCode Web: {origin if open_browser else url}")
     print("仅允许本机访问。按 Ctrl+C 停止服务。")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

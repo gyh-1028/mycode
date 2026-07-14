@@ -7,6 +7,7 @@ import pytest
 from mycode.session import (
     CURRENT_SCHEMA_VERSION,
     Session,
+    SessionConflictError,
     SessionError,
     UnsupportedSchemaError,
 )
@@ -54,6 +55,22 @@ def test_save_is_atomic_no_tmp_left(tmp_path) -> None:
     s.save(_convo())
     assert s.path.is_file()
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_stale_session_save_is_rejected(tmp_path) -> None:
+    session = Session.new(model="m", provider="p", base_dir=tmp_path)
+    session.save([{"role": "user", "content": "initial"}])
+    first = Session.load(session.id, base_dir=tmp_path)
+    stale = Session.load(session.id, base_dir=tmp_path)
+    assert first is not None and stale is not None
+
+    first.save([{"role": "user", "content": "first writer"}])
+    with pytest.raises(SessionConflictError):
+        stale.save([{"role": "user", "content": "stale writer"}])
+
+    loaded = Session.load(session.id, base_dir=tmp_path)
+    assert loaded is not None
+    assert loaded.messages[-1]["content"] == "first writer"
 
 
 def test_load_missing_returns_none(tmp_path) -> None:

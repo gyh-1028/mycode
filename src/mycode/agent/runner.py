@@ -566,7 +566,10 @@ class AgentRunner:
                     else:
                         tr = dispatch_tool(tc.name, tc.args)
                     if not tr.is_error and request.context_selector is not None and tc.name in {"edit_file", "write_file", "apply_patch"}:
-                        request.context_selector.invalidate()
+                        changed_path = tc.args.get("path")
+                        request.context_selector.invalidate(
+                            str(changed_path) if changed_path is not None else None
+                        )
                     out_messages.append({"role": "tool", "tool_call_id": tc.id, "content": tr.content})
                     result.tool_calls += 1
                     duration_ms = int((time.monotonic() - tool_call_started_at) * 1000)

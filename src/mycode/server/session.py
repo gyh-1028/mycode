@@ -16,6 +16,7 @@ from mycode.agent.runner import CancellationToken
 from mycode.approvals import PERMISSION_MODES, ApprovalRequest
 from mycode.checkpoint import Checkpoint
 from mycode.model_store import (
+    MODEL_CATALOG_METADATA,
     MODEL_CATALOGS,
     PRESETS,
     CredentialStore,
@@ -38,6 +39,8 @@ class MessageWriter(Protocol):
 class PendingApproval:
     event: threading.Event
     approved: bool = False
+    scope: str = "once"
+    cache_key: str | None = None
 
 
 class RpcSession:
@@ -62,6 +65,7 @@ class RpcSession:
         self._run_id: str | None = None
         self._pending: dict[str, PendingApproval] = {}
         self._pending_lock = threading.Lock()
+        self._approval_cache: set[str] = set()
 
     @property
     def run_active(self) -> bool:
@@ -72,6 +76,10 @@ class RpcSession:
         self._deny_pending()
         if self._run_thread is not None:
             self._run_thread.join(timeout=5.0)
+        if self.runtime is not None:
+            close = getattr(self.runtime, "close", None)
+            if callable(close):
+                close()
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
         if method == "initialize":
@@ -88,6 +96,7 @@ class RpcSession:
             "session/open": self._session_open,
             "session/delete": self._session_delete,
             "session/diff": self._session_diff,
+            "session/undo": self._session_undo,
             "session/compact": self._session_compact,
             "workspace/list": self._workspace_list,
             "workspace/read": self._workspace_read,
@@ -143,7 +152,9 @@ class RpcSession:
                 "agentEvents": True,
                 "cancellation": True,
                 "permissions": True,
+                "approvalScopes": ["once", "run"],
                 "sessions": True,
+                "undo": True,
                 "tools": True,
                 "mcp": True,
                 "skills": True,
@@ -170,6 +181,7 @@ class RpcSession:
         return {"session": self.runtime.session_payload(session, include_messages=True)}
 
     def _session_open(self, params: dict[str, Any]) -> dict[str, Any]:
+        self._require_idle()
         assert self.runtime is not None
         session_id = _require_string(params, "sessionId")
         try:
@@ -218,6 +230,27 @@ class RpcSession:
             combined.append(diff)
         return {"checkpointId": checkpoint.id, "files": files, "diff": "\n".join(combined)}
 
+    def _session_undo(self, params: dict[str, Any]) -> dict[str, Any]:
+        self._require_idle()
+        session_id = _require_string(params, "sessionId")
+        checkpoint = Checkpoint.latest(session_id)
+        if checkpoint is None:
+            return {
+                "undone": False,
+                "checkpointId": None,
+                "files": [],
+                "summary": "当前会话没有可撤销的文件修改",
+            }
+        files = checkpoint.changed_paths()
+        summary = checkpoint.undo()
+        failed = summary.startswith("错误:") or "\n错误:\n" in summary
+        return {
+            "undone": not failed,
+            "checkpointId": checkpoint.id,
+            "files": files,
+            "summary": summary,
+        }
+
     def _session_compact(self, params: dict[str, Any]) -> dict[str, Any]:
         self._require_idle()
         assert self.runtime is not None
@@ -252,6 +285,7 @@ class RpcSession:
             "profiles": [_profile_payload(profile, store.active == name) for name, profile in sorted(store.profiles.items())],
             "presets": [_profile_payload(profile, False, include_key=False) for _, profile in sorted(PRESETS.items())],
             "catalogs": MODEL_CATALOGS,
+            "catalogMetadata": MODEL_CATALOG_METADATA,
         }
 
     def _model_save(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -306,8 +340,13 @@ class RpcSession:
             store.active = previous
             store.save()
             raise ProtocolError(-32031, "Model activation failed", {"type": type(exc).__name__, "detail": str(exc)}) from exc
+        previous_runtime = self.runtime
         self.runtime = replacement
         self.initialized = True
+        if previous_runtime is not None:
+            close = getattr(previous_runtime, "close", None)
+            if callable(close):
+                close()
         session = replacement.new_session()
         return {"runtime": self._runtime_payload(), "session": replacement.session_payload(session, include_messages=True)}
 
@@ -350,6 +389,7 @@ class RpcSession:
         token = CancellationToken()
         self._run_id = run_id
         self._run_token = token
+        self._approval_cache.clear()
 
         def run() -> None:
             try:
@@ -385,6 +425,7 @@ class RpcSession:
                 )
             finally:
                 self._deny_pending()
+                self._approval_cache.clear()
                 self._run_token = None
 
         self._run_thread = threading.Thread(target=run, name=f"mycode-run-{run_id}", daemon=True)
@@ -395,14 +436,29 @@ class RpcSession:
         self.writer.send(notification("agent/event", event_payload(event)))
 
     def _request_approval(self, request: ApprovalRequest) -> bool:
+        cache_key = _approval_cache_key(request)
+        if cache_key in self._approval_cache:
+            return True
         approval_id = uuid.uuid4().hex[:12]
-        pending = PendingApproval(threading.Event())
+        pending = PendingApproval(threading.Event(), cache_key=cache_key)
         with self._pending_lock:
             self._pending[approval_id] = pending
-        self.writer.send(notification("permission/request", {"approvalId": approval_id, "runId": self._run_id, **asdict(request)}))
+        self.writer.send(
+            notification(
+                "permission/request",
+                {
+                    "approvalId": approval_id,
+                    "runId": self._run_id,
+                    "canRememberForRun": True,
+                    **asdict(request),
+                },
+            )
+        )
         completed = pending.event.wait(timeout=self.approval_timeout)
         with self._pending_lock:
             self._pending.pop(approval_id, None)
+        if completed and pending.approved and pending.scope == "run" and pending.cache_key:
+            self._approval_cache.add(pending.cache_key)
         return completed and pending.approved
 
     def _permission_response(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -410,11 +466,15 @@ class RpcSession:
         approved = params.get("approved")
         if not isinstance(approved, bool):
             raise ProtocolError(-32602, "approved must be a boolean")
+        scope = params.get("scope", "once")
+        if scope not in {"once", "run"}:
+            raise ProtocolError(-32602, "scope must be once or run")
         with self._pending_lock:
             pending = self._pending.get(approval_id)
         if pending is None:
             raise ProtocolError(-32011, "Unknown or expired approval", {"approvalId": approval_id})
         pending.approved = approved
+        pending.scope = str(scope)
         pending.event.set()
         return {"accepted": True}
 
@@ -437,6 +497,16 @@ class RpcSession:
         for request in pending:
             request.approved = False
             request.event.set()
+
+
+def _approval_cache_key(request: ApprovalRequest) -> str:
+    if request.command:
+        target = " ".join(request.command.split())
+    elif request.display_path:
+        target = request.display_path.replace("\\", "/")
+    else:
+        target = request.action or request.prompt
+    return f"{request.kind}:{request.action or ''}:{target}"
 
 
 def _profile_payload(profile: ModelProfile, active: bool, *, include_key: bool = True) -> dict[str, Any]:

@@ -112,7 +112,8 @@
                 "diff": { "type": ["string", "null"] },
                 "command": { "type": ["string", "null"] },
                 "risk": { "type": ["string", "null"] },
-                "action": { "type": ["string", "null"] }
+                "action": { "type": ["string", "null"] },
+                "canRememberForRun": { "type": "boolean" }
               },
               "additionalProperties": false
             }

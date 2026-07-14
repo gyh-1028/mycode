@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from mycode.agent.events import RunStatus
-from mycode.web.server import create_web_app
+from mycode.web.server import create_web_app, run_web_server
 from tests.test_server import _BlockingRuntime, _FakeRuntime
 
 
@@ -35,6 +35,31 @@ def test_web_serves_static_with_security_headers(tmp_path) -> None:
         assert response.status_code == 200
         assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
         assert response.headers["cache-control"] == "no-store"
+
+
+def test_no_open_prints_authenticated_url(monkeypatch, capsys) -> None:
+    import uvicorn
+
+    class FakeListener:
+        def getsockname(self):
+            return ("127.0.0.1", 8765)
+
+    class FakeServer:
+        def __init__(self, _config) -> None:
+            pass
+
+        def run(self, *, sockets) -> None:
+            assert len(sockets) == 1
+
+    monkeypatch.setattr("mycode.web.server._listen_socket", lambda _port: FakeListener())
+    monkeypatch.setattr("mycode.web.server.create_web_app", lambda **_kwargs: object())
+    monkeypatch.setattr("mycode.web.server.secrets.token_urlsafe", lambda _size: "test-token")
+    monkeypatch.setattr(uvicorn, "Config", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(uvicorn, "Server", FakeServer)
+
+    run_web_server(port=8765, open_browser=False)
+
+    assert "http://127.0.0.1:8765/#token=test-token" in capsys.readouterr().out
 
 
 def test_websocket_auth_and_rpc_round_trip(tmp_path, monkeypatch) -> None:

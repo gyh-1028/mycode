@@ -70,10 +70,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mycode-ai/mycode"
-Documentation = "https://github.com/mycode-ai/mycode#readme"
-Issues = "https://github.com/mycode-ai/mycode/issues"
-Source = "https://github.com/mycode-ai/mycode"
+Homepage = "https://github.com/gyh-1028/mycode"
+Documentation = "https://github.com/gyh-1028/mycode#readme"
+Issues = "https://github.com/gyh-1028/mycode/issues"
+Source = "https://github.com/gyh-1028/mycode"
 
 [project.scripts]
 mycode = "mycode.cli:app"
@@ -82,7 +82,7 @@ mycode = "mycode.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mycode = ["web/static/**/*"]
+mycode = ["web/static/**/*", "data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
